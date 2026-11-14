@@ -37,6 +37,8 @@ const en = {
 
 	'toolbar.closeTab': 'Close tab',
 	'toolbar.newTab': 'Open repository',
+	'toolbar.prevTab': 'Previous tab',
+	'toolbar.nextTab': 'Next tab',
 	'toolbar.branch': 'Branch',
 	'toolbar.stash': 'Stash',
 	'toolbar.settings': 'Settings',
@@ -286,6 +288,8 @@ const ru: Record<Key, string> = {
 
 	'toolbar.closeTab': 'Закрыть вкладку',
 	'toolbar.newTab': 'Открыть репозиторий',
+	'toolbar.prevTab': 'Предыдущая вкладка',
+	'toolbar.nextTab': 'Следующая вкладка',
 	'toolbar.branch': 'Ветка',
 	'toolbar.stash': 'Стеш',
 	'toolbar.settings': 'Настройки',

@@ -3,6 +3,8 @@
 		ArrowDown,
 		ArrowUp,
 		Archive,
+		ChevronLeft,
+		ChevronRight,
 		Copy,
 		GitBranchPlus,
 		GitMerge,
@@ -26,6 +28,14 @@
 	const repo = $derived(app.active);
 	const branch = $derived(repo?.currentBranch ?? null);
 
+	const index = $derived(repo ? app.tabs.indexOf(repo) : -1);
+	let strip: HTMLElement | undefined = $state();
+
+	// Keep the active tab visible when the strip overflows.
+	$effect(() => {
+		if (index >= 0) strip?.children[index]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+	});
+
 	const win = getCurrentWindow();
 	let maximized = $state(false);
 
@@ -41,23 +51,8 @@
 <header data-tauri-drag-region>
 	<div class="brand" data-tauri-drag-region><FoxMark /></div>
 
-	<nav class="tabs" data-tauri-drag-region>
-		{#each app.tabs as tab (tab.path)}
-			<div class="tab" class:active={tab === app.active}>
-				<button class="tab-name ellipsis" title={tab.path} onclick={() => app.selectTab(tab)}>
-					{tab.name}
-				</button>
-				<button class="icon-btn close" aria-label={t('toolbar.closeTab')} onclick={() => app.closeTab(tab)}>
-					<X size={14} strokeWidth={1.5} />
-				</button>
-			</div>
-		{/each}
-		<button class="icon-btn" aria-label={t('toolbar.newTab')} title={t('toolbar.newTab')} onclick={() => (app.active = null)}>
-			<Plus size={16} strokeWidth={1.5} />
-		</button>
-	</nav>
-
 	<Progress />
+	<div class="spacer" data-tauri-drag-region></div>
 
 	{#if repo}
 		<div class="actions">
@@ -130,6 +125,42 @@
 	{/if}
 </header>
 
+<nav class="tabbar" data-tauri-drag-region>
+	<button
+		class="icon-btn square"
+		aria-label={t('toolbar.prevTab')}
+		title={t('toolbar.prevTab')}
+		disabled={index <= 0}
+		onclick={() => app.selectTab(app.tabs[index - 1])}
+	>
+		<ChevronLeft size={16} strokeWidth={1.5} />
+	</button>
+	<div class="tabs" bind:this={strip}>
+		{#each app.tabs as tab (tab.path)}
+			<div class="tab" class:active={tab === app.active}>
+				<button class="tab-name ellipsis" title={tab.path} onclick={() => app.selectTab(tab)}>
+					{tab.name}
+				</button>
+				<button class="icon-btn close" aria-label={t('toolbar.closeTab')} onclick={() => app.closeTab(tab)}>
+					<X size={14} strokeWidth={1.5} />
+				</button>
+			</div>
+		{/each}
+	</div>
+	<button
+		class="icon-btn square"
+		aria-label={t('toolbar.nextTab')}
+		title={t('toolbar.nextTab')}
+		disabled={index >= app.tabs.length - 1}
+		onclick={() => app.selectTab(app.tabs[index + 1])}
+	>
+		<ChevronRight size={16} strokeWidth={1.5} />
+	</button>
+	<button class="icon-btn square" aria-label={t('toolbar.newTab')} title={t('toolbar.newTab')} onclick={() => (app.active = null)}>
+		<Plus size={16} strokeWidth={1.5} />
+	</button>
+</nav>
+
 <style>
 	header {
 		display: flex;
@@ -148,20 +179,43 @@
 		padding: 0 4px;
 	}
 
+	.spacer {
+		flex: 1;
+		align-self: stretch;
+	}
+
+	.tabbar {
+		display: flex;
+		align-items: center;
+		flex: none;
+		gap: 4px;
+		height: 40px;
+		padding: 0 8px;
+		border-bottom: 1px solid var(--line);
+		background: var(--deep);
+	}
+
+	.tabbar .icon-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
+		background: none;
+	}
+
 	.tabs {
 		display: flex;
 		align-items: center;
 		flex: 1;
 		gap: 4px;
 		min-width: 0;
-		overflow: hidden;
+		overflow-x: auto;
+		scrollbar-width: none;
 	}
 
 	.tab {
 		display: flex;
 		align-items: center;
 		flex: 0 1 180px;
-		min-width: 80px;
+		min-width: 120px;
 		height: 32px;
 		padding-right: 4px;
 		border-radius: 8px;
