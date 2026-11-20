@@ -43,7 +43,10 @@
 	});
 
 	function fileMenu(event: MouseEvent, files: FileChange[]) {
-		app.showMenu(event, [{ label: t('common.copyPath'), action: () => app.copy(files[0].path) }]);
+		app.showMenu(event, [
+			{ label: t('history.open'), action: () => (app.history = { repo, path: files[0].path }) },
+			{ label: t('common.copyPath'), action: () => app.copy(files[0].path) }
+		]);
 	}
 </script>
 

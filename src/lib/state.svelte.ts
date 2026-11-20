@@ -1,6 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { record } from './log.svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import {
@@ -11,7 +12,8 @@ import {
 	type GithubUser,
 	type LfsInfo,
 	type Overview,
-	type Status
+	type Status,
+	type UpdateInfo
 } from './api';
 import { layoutGraph, type GraphLayout } from './graph';
 import { locale, setLanguage, t, type Language } from './i18n.svelte';
@@ -20,6 +22,7 @@ import { applyTheme, onSystemThemeChange, readSystemAccent, type Mode } from './
 const PAGE = 2000;
 const PATHS_PER_COMMAND = 200;
 const SETTINGS_KEY = 'fox-git.settings';
+const DOWNLOAD_PAGE = 'https://lis-carter.site/fox-git/#download';
 const AUTH_FAILURES = [
 	'Authentication failed',
 	'could not read Username',
@@ -36,6 +39,8 @@ interface Settings {
 	logHeight: number;
 	/** The title bar of the system instead of the window buttons in the toolbar. */
 	systemTitleBar: boolean;
+	/** Looks for a newer release on the site at startup. */
+	checkUpdates: boolean;
 	sidebarWidth: number;
 	changesWidth: number;
 	/** The part of the change lists that the unstaged files take. */
@@ -57,6 +62,7 @@ function loadSettings(): Settings {
 		terminalHeight: 320,
 		logHeight: 200,
 		systemTitleBar: false,
+		checkUpdates: true,
 		sidebarWidth: 256,
 		changesWidth: 392,
 		unstagedShare: 0.5,
@@ -407,6 +413,43 @@ export class Repo {
 			this.summary = first;
 			this.description = rest.join('\n').trim();
 			this.amended = { summary: this.summary, description: this.description };
+		} catch (error) {
+			app.toast(String(error));
+		}
+	}
+
+	/**
+	 * Takes the last commit back: its changes return to the index and its message to the form,
+	 * so a forgotten file can be added before committing again.
+	 */
+	async undoCommit() {
+		const head = this.overview?.head_hash;
+		if (!head) return;
+		try {
+			const commit = await api.commitShow(this.path, head);
+			if (commit.parents.length !== 1) {
+				app.toast(t(commit.parents.length ? 'undo.merge' : 'undo.first'));
+				return;
+			}
+			const branch = this.currentBranch;
+			if (branch?.upstream && branch.ahead === 0) {
+				const ok = await app.ask({
+					title: t('undo.title'),
+					message: t('undo.pushed', { upstream: branch.upstream }),
+					confirm: t('undo.confirm'),
+					danger: true
+				});
+				if (!ok) return;
+			}
+			if (!(await this.run(['reset', '--soft', 'HEAD~1'], t('busy.undo')))) return;
+			if (!this.summary.trim() && !this.description.trim()) {
+				const [first, ...rest] = commit.message.trim().split('\n');
+				this.summary = first;
+				this.description = rest.join('\n').trim();
+			}
+			this.amend = false;
+			this.amended = null;
+			this.view = 'changes';
 		} catch (error) {
 			app.toast(String(error));
 		}
@@ -850,6 +893,10 @@ class App {
 	dialog = $state<DialogRequest | null>(null);
 	menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
 	user = $state<GithubUser | null>(null);
+	/** A newer release found on the site; `progress` is set while it downloads. */
+	update = $state<(UpdateInfo & { progress: number | null; installed: boolean }) | null>(null);
+	/** The file whose history is open. */
+	history = $state<{ repo: Repo; path: string } | null>(null);
 	systemAccent = $state<string | null>(null);
 	private toastId = 0;
 
@@ -898,6 +945,42 @@ class App {
 		this.save();
 		const launched = await api.launchPath();
 		if (launched) await this.openPath(launched);
+		if (this.settings.checkUpdates) setTimeout(() => this.checkUpdates(false), 3000);
+	}
+
+	/** A check at startup stays quiet unless it finds something; a manual one always answers. */
+	async checkUpdates(manual: boolean) {
+		try {
+			const found = await this.track(t('busy.updateCheck'), false, () => api.updateCheck());
+			if (found) this.update = { ...found, progress: null, installed: false };
+			else if (manual) this.toast(t('update.latest'), 'info');
+		} catch (error) {
+			if (manual) this.toast(t('update.failed', { error: String(error) }));
+			else record('warning', t('update.failed', { error: String(error) }));
+		}
+	}
+
+	async installUpdate() {
+		const update = this.update;
+		if (!update) return;
+		if (!update.installable) {
+			this.update = null;
+			await openUrl(DOWNLOAD_PAGE).catch((error) => this.toast(String(error)));
+			return;
+		}
+		update.progress = 0;
+		try {
+			await api.updateInstall((percent) => (update.progress = percent));
+			update.installed = true;
+		} catch (error) {
+			this.toast(String(error));
+		} finally {
+			update.progress = null;
+		}
+	}
+
+	restartForUpdate() {
+		api.updateRestart().catch((error) => this.toast(String(error)));
 	}
 
 	private async onFocus() {

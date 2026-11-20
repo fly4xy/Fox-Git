@@ -7,11 +7,15 @@ export interface Segment {
 	from: number;
 	to: number;
 	color: number;
+	/** The line of the lane the segment belongs to. */
+	line: number;
 }
 
 export interface GraphRow {
 	lane: number;
 	color: number;
+	/** One line runs from the commit that claims a lane down to where the lane ends, as one branch does. */
+	line: number;
 	segments: Segment[];
 }
 
@@ -24,14 +28,17 @@ export interface GraphLayout {
 export function layoutGraph(commits: Commit[]): GraphLayout {
 	const lanes: (string | null)[] = [];
 	const colors: number[] = [];
+	const lines: number[] = [];
 	const rows: GraphRow[] = [];
 	let nextColor = 0;
+	let nextLine = 0;
 	let width = 1;
 
 	const claimLane = () => {
 		let lane = lanes.indexOf(null);
 		if (lane < 0) lane = lanes.push(null) - 1;
 		colors[lane] = nextColor++ % LANE_COLORS;
+		lines[lane] = nextLine++;
 		return lane;
 	};
 
@@ -39,6 +46,7 @@ export function layoutGraph(commits: Commit[]): GraphLayout {
 		const incoming = lanes.flatMap((hash, lane) => (hash === commit.hash ? [lane] : []));
 		const lane = incoming.length ? incoming[0] : claimLane();
 		const color = colors[lane];
+		const line = lines[lane];
 
 		// Extra children of this commit bend into its lane in the gap above.
 		for (const other of incoming.slice(1)) {
@@ -51,7 +59,7 @@ export function layoutGraph(commits: Commit[]): GraphLayout {
 
 		const segments: Segment[] = [];
 		lanes.forEach((hash, l) => {
-			if (hash) segments.push({ from: l, to: l, color: colors[l] });
+			if (hash) segments.push({ from: l, to: l, color: colors[l], line: lines[l] });
 		});
 
 		commit.parents.forEach((parent, order) => {
@@ -60,10 +68,10 @@ export function layoutGraph(commits: Commit[]): GraphLayout {
 				target = order === 0 ? lane : claimLane();
 				lanes[target] = parent;
 			}
-			segments.push({ from: lane, to: target, color: colors[target] });
+			segments.push({ from: lane, to: target, color: colors[target], line: lines[target] });
 		});
 
-		rows.push({ lane, color, segments });
+		rows.push({ lane, color, line, segments });
 		width = Math.max(width, lanes.length);
 	});
 

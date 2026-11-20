@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { getVersion } from '@tauri-apps/api/app';
 	import { onMount } from 'svelte';
 	import { api, type SshKey } from '$lib/api';
 	import { setLanguage, t, type Language } from '$lib/i18n.svelte';
@@ -99,6 +100,9 @@
 		}
 	}
 
+	let version = $state('');
+	getVersion().then((v) => (version = v), () => {});
+
 	function testSsh() {
 		app.track(t('busy.sshTest'), false, () => api.sshTest()).then((message) => app.toast(message, 'info'), report);
 	}
@@ -131,6 +135,25 @@
 				/>
 				{t('settings.systemTitleBar')}
 			</label>
+		</section>
+
+		<section>
+			<h3>{t('settings.updates')}</h3>
+			<label class="check">
+				<input
+					type="checkbox"
+					checked={app.settings.checkUpdates}
+					onchange={(e) => {
+						app.settings.checkUpdates = e.currentTarget.checked;
+						app.save();
+					}}
+				/>
+				{t('settings.checkUpdates')}
+			</label>
+			<div class="modes spaced version">
+				<button class="btn" disabled={app.working} onclick={() => app.checkUpdates(true)}>{t('settings.checkNow')}</button>
+				{#if version}<span class="muted mono">{t('settings.version', { version })}</span>{/if}
+			</div>
 		</section>
 
 		<section>
@@ -264,6 +287,11 @@
 	.modes {
 		display: flex;
 		gap: 4px;
+	}
+
+	.version {
+		align-items: center;
+		gap: 12px;
 	}
 
 	.spaced {

@@ -2,6 +2,7 @@ mod git;
 mod github;
 mod system;
 mod terminal;
+mod update;
 
 /// The repository passed on the command line, as in `fox-git .`.
 #[tauri::command]
@@ -61,6 +62,7 @@ pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(update::Pending::default())
         .manage(terminal::Terminals::default())
         .invoke_handler(tauri::generate_handler![
             launch_path,
@@ -71,6 +73,7 @@ pub fn run() {
             git::file_diff,
             git::conflict_diff,
             git::commit_show,
+            git::file_log,
             git::commit_file_diff,
             git::lfs_info,
             git::git_action,
@@ -93,13 +96,21 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            update::update_check,
+            update::update_install,
+            update::update_restart,
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
 
     #[cfg(windows)]
     if result.is_err() {
         offer_webview2();
         return;
     }
-    result.expect("error while running Fox Git");
+    update::clean_up();
+    result.expect("error while running Fox Git").run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            update::on_exit(tauri::Manager::state(app));
+        }
+    });
 }

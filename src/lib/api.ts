@@ -33,6 +33,16 @@ export interface Commit {
 	refs: string;
 	subject: string;
 }
+/** A commit that changed one file, with the file's name in that commit. */
+export interface FileCommit extends Commit {
+	path: string;
+	old_path: string | null;
+}
+export interface UpdateInfo {
+	version: string;
+	/** False when this copy cannot replace itself, as when it runs from the sources. */
+	installable: boolean;
+}
 export interface FileChange {
 	path: string;
 	old_path: string | null;
@@ -110,6 +120,14 @@ export const api = {
 		invoke<string>('file_diff', { repo, path, staged, untracked }),
 	conflictDiff: (repo: string, path: string) => invoke<Conflict>('conflict_diff', { repo, path }),
 	commitShow: (repo: string, hash: string) => invoke<CommitDetail>('commit_show', { repo, hash }),
+	fileLog: (repo: string, path: string) => invoke<FileCommit[]>('file_log', { repo, path }),
+	updateCheck: () => invoke<UpdateInfo | null>('update_check'),
+	updateInstall: (onProgress: (percent: number) => void) => {
+		const progress = new Channel<number>();
+		progress.onmessage = onProgress;
+		return invoke<void>('update_install', { progress });
+	},
+	updateRestart: () => invoke<void>('update_restart'),
 	commitFileDiff: (
 		repo: string,
 		hash: string,

@@ -377,6 +377,62 @@ pub fn log(repo: String, limit: u32, skip: u32) -> Res<Vec<Commit>> {
     Ok(parse_log(&raw))
 }
 
+#[derive(Serialize)]
+pub struct FileCommit {
+    #[serde(flatten)]
+    commit: Commit,
+    /// The file's name in this commit, which differs from today's after a rename.
+    path: String,
+    old_path: Option<String>,
+}
+
+/// Commits that changed one file, newest first, following it across renames.
+#[tauri::command(async)]
+pub fn file_log(repo: String, path: String) -> Res<Vec<FileCommit>> {
+    let raw = run(
+        &repo,
+        &[
+            "-c",
+            "log.showSignature=false",
+            "log",
+            "--follow",
+            "-M",
+            "-n1000",
+            "--name-status",
+            "-z",
+            "--format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1f",
+            "--",
+            &path,
+        ],
+    )?;
+    let mut name = path;
+    let mut commits = vec![];
+    for record in raw.split(RECORD) {
+        let fields: Vec<&str> = record.splitn(8, FIELD).collect();
+        let [hash, parents, author, email, time, refs, subject, names] = fields[..] else { continue };
+        // Merges list no files, so they keep the name of the newer commit.
+        let (path, old_path) = match parse_name_status(names.trim_start_matches(['\n', '\0'])).into_iter().next() {
+            Some(change) => (change.path, change.old_path),
+            None => (name.clone(), None),
+        };
+        name = old_path.clone().unwrap_or_else(|| path.clone());
+        commits.push(FileCommit {
+            commit: Commit {
+                hash: hash.into(),
+                parents: parents.split_whitespace().map(str::to_string).collect(),
+                author: author.into(),
+                email: email.into(),
+                time: time.parse().unwrap_or(0),
+                refs: refs.into(),
+                subject: subject.into(),
+            },
+            path,
+            old_path,
+        });
+    }
+    Ok(commits)
+}
+
 #[derive(Serialize, Clone)]
 pub struct FileChange {
     path: String,
@@ -668,6 +724,46 @@ pub fn clone_repo(url: String, dest: String, progress: Channel<String>) -> Res<S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_history_follows_renames() {
+        let dir = std::env::temp_dir().join("fox-git-file-log-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo = dir.to_string_lossy().to_string();
+        let git = |args: &[&str]| {
+            let mut all = vec!["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"];
+            all.extend_from_slice(args);
+            run(&repo, &all)
+        };
+        git(&["init", "-q", "-b", "main"]).unwrap();
+        std::fs::write(dir.join("old.txt"), "one
+two
+three
+four
+").unwrap();
+        std::fs::write(dir.join("other.txt"), "x
+").unwrap();
+        git(&["add", "."]).unwrap();
+        git(&["commit", "-q", "-m", "add"]).unwrap();
+        git(&["mv", "old.txt", "new.txt"]).unwrap();
+        git(&["commit", "-q", "-m", "rename"]).unwrap();
+        std::fs::write(dir.join("other.txt"), "y
+").unwrap();
+        git(&["commit", "-q", "-am", "unrelated"]).unwrap();
+        std::fs::write(dir.join("new.txt"), "one
+two
+three
+five
+").unwrap();
+        git(&["commit", "-q", "-am", "edit"]).unwrap();
+
+        let log = file_log(repo, "new.txt".into()).unwrap();
+        let seen: Vec<(&str, &str)> = log.iter().map(|c| (c.commit.subject.as_str(), c.path.as_str())).collect();
+        assert_eq!(seen, [("edit", "new.txt"), ("rename", "new.txt"), ("add", "old.txt")]);
+        assert_eq!(log[1].old_path.as_deref(), Some("old.txt"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn conflicts_show_both_sides_and_the_prepared_message() {

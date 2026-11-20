@@ -1,6 +1,6 @@
 {
   "name": "fox-git",
-  "version": "0.8.0",
+  "version": "0.81.0",
   "description": "",
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "build:windows": "tauri build --bundles nsis",
-    "build:linux": "tauri build --bundles deb,appimage"
+    "build:windows": "tauri build --bundles nsis && node scripts/latest.mjs windows",
+    "build:linux": "tauri build --bundles deb,appimage && node scripts/latest.mjs linux"
   },
   "license": "MIT",
   "dependencies": {

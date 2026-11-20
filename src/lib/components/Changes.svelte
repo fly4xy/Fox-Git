@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Splitter from './Splitter.svelte';
-	import { Minus, Plus, Undo2 } from '@lucide/svelte';
+	import { Minus, Plus, RotateCcw, Undo2 } from '@lucide/svelte';
 	import { api, type FileChange } from '$lib/api';
 	import { t } from '$lib/i18n.svelte';
 	import { app, ignoreChoices, type Repo } from '$lib/state.svelte';
@@ -59,7 +59,10 @@
 				? { label: t('changes.unstage') + count, action: () => repo.unstage(files) }
 				: { label: t('changes.stage') + count, action: () => repo.stage(files) },
 			...(files.length === 1
-				? [{ label: t('common.copyPath'), action: () => app.copy(files[0].path) }]
+				? [
+						{ label: t('history.open'), action: () => (app.history = { repo, path: files[0].path }) },
+						{ label: t('common.copyPath'), action: () => app.copy(files[0].path) }
+					]
 				: []),
 			...ignoreChoices(files.map((f) => f.path)).map((choice, i) => ({
 				label: t('ignore.pattern', { pattern: choice.label }),
@@ -293,7 +296,19 @@
 					<input type="checkbox" checked={repo.amend} onchange={(e) => repo.toggleAmend(e.currentTarget.checked)} />
 					{t('changes.amend')}
 				</label>
-				<button class="btn primary" type="submit" disabled={!canCommit}>{t('changes.commit')}</button>
+				<span class="commit-actions">
+					<button
+						class="icon-btn"
+						type="button"
+						aria-label={t('changes.undo')}
+						title={t('changes.undo')}
+						disabled={!repo.overview?.head_hash || app.working}
+						onclick={() => repo.undoCommit()}
+					>
+						<RotateCcw size={16} strokeWidth={1.5} />
+					</button>
+					<button class="btn primary" type="submit" disabled={!canCommit}>{t('changes.commit')}</button>
+				</span>
 			</div>
 		</form>
 	</div>
@@ -445,6 +460,12 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
+	}
+
+	.commit-actions {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 	}
 
 	.empty {

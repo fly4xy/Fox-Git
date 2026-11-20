@@ -13,8 +13,11 @@ It runs on the git you already have, so your repositories and settings stay as t
 ## Features
 
 - **Commit graph.** Branches, merges and tags on one graph, next to a filterable list of branches.
+  Point at a commit to light up its branch and the branch name.
+- **File history.** Right-click a file to see every commit that changed it, across renames.
 - **Staging by hunk.** Stage, unstage or revert a file or a single hunk. Files show as a list or as folders.
 - **Commits.** A summary line and a description, amend the last commit, and the message git prepares for a merge.
+  Undo the last commit to add a forgotten file: its changes and message come back.
 - **Merge and rebase.** Merge or rebase branches from the toolbar. For each conflict compare both versions,
   with their dates and a diff, pick ours or theirs, then continue or abort a merge, rebase, cherry-pick or revert.
 - **Branches.** Check out, merge, rebase, rename, set an upstream or delete a branch, on the remote too.
@@ -26,6 +29,8 @@ It runs on the git you already have, so your repositories and settings stay as t
   test the connection and add the key to GitHub.
 - **Several repositories.** Keep repositories in tabs, drop a folder onto the window, or open one from the terminal.
 - **Log.** Every git command and its warnings and errors, in a panel that opens by itself when something fails.
+- **Updates.** Fox Git checks the site for a new version at startup or on request, then downloads,
+  checks and installs it.
 - **Your layout.** Resize the panels, pick English or Russian, one of four palettes or your system accent colour,
   a dark or light theme, and the app's own title bar or the system one.
 
@@ -81,7 +86,21 @@ Build the Linux packages:
 npm run build:linux
 ```
 
-The output lands in `src-tauri/target/release/bundle/`.
+The builds then land in `dist-windows/` and `dist-linux/` together with the update manifests.
+
+### Releasing a version
+
+1. Raise the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+   Without it no one is offered the update.
+2. Build with `npm run build:windows` and `npm run build:linux`. `scripts/latest.mjs` copies the files into
+   `dist-*/` and writes `latest-setup.json`, `latest-portable.json` and `latest-deb.json` next to them:
+   `{"version", "file", "url", "size", "sha256"}`.
+3. Upload everything to `https://downloads.lis-carter.site/fox-git/`: the files first, the `latest-*.json` after them.
+
+The app reads the manifest that matches how it was installed. The installed version runs the new installer
+after it closes, the portable exe renames itself to `fox-git.exe.old` and the new file takes its name, and the
+.deb is installed with `pkexec apt-get`. A file whose size or SHA-256 differs is thrown away.
+`FOXGIT_UPDATE_BASE` points the app at another folder for tests.
 
 ### GitHub sign-in
 
@@ -106,7 +125,8 @@ of Settings). They are retaken when the interface changes, under the same names:
 | `light.webp` | History in the light theme |
 | `merge.webp` | The merge and rebase dialog |
 | `conflict.webp` | A merge conflict: both sides and their diff |
-| `palettes.webp` | Settings: language, palette and theme |
+| `file-history.webp` | The history of one file: its commits and the diff of the selected one |
+| `palettes.webp` | Settings: language, window, updates, palette and theme |
 
 ## Tech
 

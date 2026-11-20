@@ -26,6 +26,22 @@
 	const visible = $derived(commits.slice(first, last));
 	const headHash = $derived(repo.overview?.head_hash);
 
+	/** The graph line under the pointer, lit along with the branch name at its top. */
+	let hovered = $state<number | null>(null);
+
+	/** The branch names of each line, taken from its topmost commit that has any. */
+	const lineNames = $derived.by(() => {
+		const names = new Map<number, string[]>();
+		const remotes = repo.overview?.remotes ?? [];
+		commits.forEach((commit, index) => {
+			const line = rows[index]?.line;
+			if (line === undefined || names.has(line) || !commit.refs) return;
+			const branches = parseRefs(commit.refs, remotes).filter((l) => l.kind !== 'tag').map((l) => l.name);
+			if (branches.length) names.set(line, branches);
+		});
+		return names;
+	});
+
 	const laneX = (lane: number) => PAD / 2 + 4 + lane * LANE;
 	const color = (index: number) => `var(--lane-${index})`;
 
@@ -66,7 +82,8 @@
 	function menu(event: MouseEvent, commit: Commit) {
 		const short = commit.hash.slice(0, 8);
 		app.showMenu(event, [
-			{ label: t('graph.checkout'), action: () => repo.run(['checkout', commit.hash]) },
+			...(commit.hash === headHash ? [{ label: t('graph.undo'), action: () => repo.undoCommit() }] : []),
+			{ label: t('graph.checkout'), action: () => repo.run(['checkout', commit.hash]), divider: commit.hash === headHash },
 			{ label: t('branch.newHere'), action: () => repo.newBranch(commit.hash) },
 			{ label: t('graph.newTag'), action: () => repo.newTag(commit.hash) },
 			{ label: 'Cherry-pick', action: () => repo.run(['cherry-pick', commit.hash]) },
@@ -79,8 +96,10 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="scroller"
+	onmouseleave={() => (hovered = null)}
 	bind:this={scroller}
 	bind:clientHeight={height}
 	onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
@@ -92,8 +111,13 @@
 		<div class="window" style:transform="translateY({first * ROW}px)">
 			{#each visible as commit, i (commit.hash)}
 				{@const labels = parseRefs(commit.refs, repo.overview?.remotes ?? [])}
+				{@const line = rows[first + i]?.line}
+				{@const branch = lineNames.get(line)}
 				<button
 					class="commit"
+					title={branch ? t('graph.branchOf', { name: branch.join(', ') }) : undefined}
+					style:--lane={color(rows[first + i]?.color ?? 0)}
+					onmouseenter={() => (hovered = line)}
 					class:selected={repo.selected === commit.hash}
 					onclick={() => (repo.selected = repo.selected === commit.hash ? null : commit.hash)}
 					oncontextmenu={(e) => menu(e, commit)}
@@ -102,7 +126,10 @@
 					<span class="subject">
 						{#each labels as label (label.kind + label.name)}
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<span class="ref mono" class:head={label.kind === 'head'} oncontextmenu={(e) => refMenu(e, label)}>
+							<span
+								class="ref mono"
+								class:head={label.kind === 'head'}
+								class:lit={hovered === line && label.kind !== 'tag'} oncontextmenu={(e) => refMenu(e, label)}>
 								{#if label.kind === 'tag'}<Tag size={12} strokeWidth={1.5} />{/if}
 								{#if label.kind === 'remote' || label.synced}<Cloud size={12} strokeWidth={1.5} />{/if}
 								{label.name}
@@ -122,7 +149,8 @@
 						<path
 							d={path(segment, Math.max(0, first - 1) + i)}
 							fill="none"
-							stroke-width="2"
+							stroke-width={hovered === segment.line ? 3 : 2}
+							opacity={hovered === null || hovered === segment.line ? 1 : 0.35}
 							style:stroke={color(segment.color)}
 						/>
 					{/each}
@@ -131,6 +159,7 @@
 					{@const row = rows[first + i]}
 					{@const x = laneX(row.lane)}
 					{@const y = i * ROW + ROW / 2}
+					{@const dim = hovered !== null && hovered !== row.line}
 					{#if commit.hash === headHash}
 						<path
 							transform="translate({x - 8} {y - 8})"
@@ -140,9 +169,9 @@
 							d="M1 0 L5.4 3.4 Q8 2.8 10.6 3.4 L15 0 L14.6 8 Q14 13 8 16 Q2 13 1.4 8 Z"
 						/>
 					{:else if commit.parents.length > 1}
-						<circle cx={x} cy={y} r="4" style:fill="var(--bg)" style:stroke={color(row.color)} stroke-width="2" />
+						<circle cx={x} cy={y} r="4" opacity={dim ? 0.35 : 1} style:fill="var(--bg)" style:stroke={color(row.color)} stroke-width="2" />
 					{:else}
-						<circle cx={x} cy={y} r="4.5" style:fill={color(row.color)} style:stroke="var(--bg)" stroke-width="1.5" />
+						<circle cx={x} cy={y} r="4.5" opacity={dim ? 0.35 : 1} style:fill={color(row.color)} style:stroke="var(--bg)" stroke-width="1.5" />
 					{/if}
 				{/each}
 			</svg>
@@ -231,6 +260,13 @@
 	.ref.head {
 		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 		color: var(--accent-ink);
+	}
+
+	.ref.lit {
+		border-color: var(--lane);
+		background: color-mix(in srgb, var(--lane) 22%, transparent);
+		color: var(--text);
+		transition: background-color 120ms var(--ease);
 	}
 
 	.author {

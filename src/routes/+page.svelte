@@ -8,6 +8,7 @@
 	import CloneDialog from '$lib/components/CloneDialog.svelte';
 	import Console from '$lib/components/Console.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import FileHistory from '$lib/components/FileHistory.svelte';
 	import History from '$lib/components/History.svelte';
 	import Lfs from '$lib/components/Lfs.svelte';
 	import LogPanel from '$lib/components/LogPanel.svelte';
@@ -17,6 +18,7 @@
 	import Splitter from '$lib/components/Splitter.svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
 	import Toolbar from '$lib/components/Toolbar.svelte';
+	import UpdateDialog from '$lib/components/UpdateDialog.svelte';
 	import Welcome from '$lib/components/Welcome.svelte';
 
 	let ready = $state(false);
@@ -59,6 +61,8 @@
 
 	{#if app.settingsOpen}<Settings />{/if}
 	{#if app.cloneOpen}<CloneDialog />{/if}
+	{#if app.history}<FileHistory repo={app.history.repo} path={app.history.path} />{/if}
+	{#if app.update}<UpdateDialog />{/if}
 	{#if app.dialog}<Dialog request={app.dialog} />{/if}
 	{#if app.menu}<Menu menu={app.menu} />{/if}
 	<Toasts />
